@@ -1,5 +1,5 @@
 use ratatui::crossterm::event::KeyCode::{Char, Down, Enter, Esc, Left, Right, Up};
-use ratatui::crossterm::event::KeyEvent;
+use ratatui::crossterm::event::{KeyEvent, KeyEventKind};
 use ratatui::Frame;
 use crate::app::AppContext;
 use crate::states::{StateAction, Stateful};
@@ -43,6 +43,9 @@ impl CollectionState {
 
 impl Stateful for CollectionState {
     fn handle_input(&mut self, ctx: &AppContext, event: KeyEvent) -> StateAction {
+        if event.kind != KeyEventKind::Press {
+            return StateAction::None;
+        }
         match event.code {
             Char('Q' | 'q') | Esc => {
                 if self.is_selecting_chart {
