@@ -1,10 +1,12 @@
 use crate::core::chart::{json_to_chart, Chart};
-use crate::models::{AssetLocation, IlluAsset, Song, SongAsset, SongMeta};
+use crate::models::{IlluAsset, Song, SongAsset, SongMeta};
+use crate::asset::AssetLocation;
 use anyhow::bail;
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
+use crate::config::{json_to_config, GlobalConfig};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct SongConfig {
@@ -12,6 +14,20 @@ pub struct SongConfig {
     pub audio_file: String,
     pub chart_files: Vec<String>,
     pub illu_file: Option<String>
+}
+
+pub fn load_config<T>(path: T) -> anyhow::Result<GlobalConfig>
+where
+    T: AsRef<Path>
+{
+    info!("Reading config: {:?}", path.as_ref());
+    let config_json = fs::read_to_string(&path)
+        .inspect_err(|e| error!("Error reading config: {e}"))?;
+
+    Ok(
+        json_to_config(&config_json)
+            .inspect_err(|e| error!("Error converting the json to chart: {e}"))?
+    )
 }
 
 pub fn load_chart<T>(path: T) -> anyhow::Result<Chart>

@@ -41,7 +41,8 @@ fn main() -> anyhow::Result<()> {
         ]
     )?;
     set_panic_hook();
-    let songs = load::load_all_songs("./assets")?;
+    let config = load::load_config("./config.json")?;
+    let songs = load::load_all_songs(&config.song_dir_path)?;
 
     if songs.is_empty() {
          anyhow::bail!("没有找到任何歌曲！请检查 assets 目录。");
@@ -60,7 +61,7 @@ fn main() -> anyhow::Result<()> {
     let mut terminal = Terminal::new(backend)?;
     terminal.clear()?;
 
-    let mut app = App::new(songs, 800);
+    let mut app = App::new(songs, config);
     app.run(&mut terminal)?;
 
     disable_raw_mode()?;

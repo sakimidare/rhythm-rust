@@ -1,0 +1,25 @@
+{
+  "song_dir_path": "./assets",
+  "log_path": "./game.log",
+  "poll_period": 4,
+  "playing": {
+    "global_offset_ms": 800,
+    "ready_seconds": 3.0,
+    "judge_core": {
+      "window": {
+        "perfect": 0.08,
+        "good": 0.16
+      },
+      "hold_tolerance": 0.008
+    },
+    "keybind": {
+      "f": 1,
+      "j": 2,
+      "k": 3,
+      "d": 0
+    },
+    "show_potential_acc": true,
+    "show_potential_rank": true,
+    "show_debug_overlay": true
+  }
+}

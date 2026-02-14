@@ -6,7 +6,11 @@ use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Padding, Paragraph};
 use std::time::Duration;
 
-pub fn draw_playing(state: &PlayingState, _ctx: &AppContext, f: &mut Frame) {
+pub fn draw_playing(
+    state: &PlayingState,
+    ctx: &AppContext,
+    f: &mut Frame,
+) {
     let area = f.area();
 
     let main_chunks = Layout::default()
@@ -20,9 +24,12 @@ pub fn draw_playing(state: &PlayingState, _ctx: &AppContext, f: &mut Frame) {
 
     draw_info_panel(state, f, main_chunks[0]);
     draw_play_panel(state, f, main_chunks[1]);
-    draw_stats_panel(state, f, main_chunks[2]);
+    draw_stats_panel(state, f, main_chunks[2],
+                     ctx.global_config.playing.show_potential_acc,
+                     ctx.global_config.playing.show_potential_rank
+    );
 
-    draw_debug_overlay(state, f);
+    if ctx.global_config.playing.show_debug_overlay {draw_debug_overlay(state, f)};
 }
 
 fn draw_info_panel(state: &PlayingState, f: &mut Frame, area: Rect) {
@@ -66,20 +73,15 @@ fn draw_play_panel(state: &PlayingState, f: &mut Frame, area: Rect) {
     let speed = 40.0;
 
     // 1. 绘制轨道背景 (当按键按下时亮起)
-    for t_idx in 0..4 {
+    for (t_idx, judge) in state.manager.judges.iter().enumerate() {
         let x = inner_area.x + (t_idx as u16 * track_width);
-        if state.key_pressed[t_idx] {
+        let is_pressed = state.key_pressed.get(&judge.id).copied().unwrap_or(false);
+
+        if is_pressed {
             let backlight = Block::default().bg(Color::Indexed(234));
             f.render_widget(backlight, Rect::new(x, inner_area.y, track_width, inner_area.height));
         }
-        // 绘制轨道分隔虚线
-        /*if t_idx > 0 {
-            for y in inner_area.y..inner_area.bottom() {
-                f.render_widget(Paragraph::new("┊"), Rect::new(x, y, 1, 1));
-            }
-        }*/
     }
-
     // 2. 绘制判定线
     f.render_widget(
         Paragraph::new("━".repeat(inner_area.width as usize))
@@ -174,7 +176,13 @@ fn draw_play_panel(state: &PlayingState, f: &mut Frame, area: Rect) {
     }
 }
 
-fn draw_stats_panel(state: &PlayingState, f: &mut Frame, area: Rect) {
+fn draw_stats_panel(
+    state: &PlayingState,
+    f: &mut Frame,
+    area: Rect,
+    show_potential_acc: bool,
+    show_potential_rank: bool
+) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .margin(1)
@@ -191,11 +199,12 @@ fn draw_stats_panel(state: &PlayingState, f: &mut Frame, area: Rect) {
 
     f.render_widget(Paragraph::new("────────").style(Style::default().fg(Color::DarkGray)), chunks[2]);
 
-    let rank = state.get_potential_rank();
+    let rank = if show_potential_rank {state.get_potential_rank()} else {state.get_rank()};
+    let acc = if show_potential_acc {state.get_potential_accuracy_pct()} else {state.get_accuracy_pct()};
     let stats = vec![
         Line::from(vec![
             Span::styled("ACC  ", Style::default().fg(Color::DarkGray)),
-            Span::styled(format!("{:.2}%", state.get_potential_accuracy_pct()), Style::default().fg(Color::Yellow)),
+            Span::styled(format!("{:.2}%", acc), Style::default().fg(Color::Yellow)),
         ]),
         Line::from(vec![
             Span::styled("RANK ", Style::default().fg(Color::DarkGray)),

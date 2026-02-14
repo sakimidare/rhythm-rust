@@ -5,10 +5,11 @@ pub mod result;
 
 use crate::app::AppContext;
 use crate::core::chart::Chart;
-use crate::models::{Rank, Song, SongAsset};
+use crate::models::{Song, SongAsset};
 use ratatui::crossterm::event::KeyEvent;
 use ratatui::Frame;
 use std::time::Duration;
+use crate::rank::Rank;
 
 pub enum StateAction {
     None,

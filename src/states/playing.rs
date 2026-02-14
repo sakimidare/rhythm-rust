@@ -1,14 +1,16 @@
-use std::time::{Duration, Instant};
-use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
-use ratatui::crossterm::event::KeyCode::{Char, Enter, Esc};
-use ratatui::Frame;
 use crate::app::AppContext;
 use crate::core::chart::{Chart, ChartMeta};
-use crate::core::judge::{JudgeCore, JudgeManager, JudgeResult, JudgeWindow};
+use crate::core::judge::{JudgeManager, JudgeResult};
 use crate::core::timing::Time;
-use crate::models::{Rank, Song, SongAsset, SongMeta};
+use crate::models::{Song, SongAsset, SongMeta};
+use crate::rank::Rank;
 use crate::states::{StateAction, Stateful};
 use crate::ui;
+use ratatui::Frame;
+use ratatui::crossterm::event::KeyCode::{Char, Enter, Esc};
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
+use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
 #[derive(Copy, Clone, PartialOrd, PartialEq)]
 pub enum PlayingPhase {
@@ -33,26 +35,29 @@ pub struct PlayingState {
     pub miss_count: u32,
     pub manager: JudgeManager,
     pub last_judge: Option<(JudgeResult, Instant)>,
-    pub key_pressed: [bool; 4],
-    pub debug_logs: Vec<String>
+    pub key_pressed: HashMap<u8, bool>,
+    pub debug_logs: Vec<String>,
 }
 
 impl PlayingState {
-    pub fn new(s: Song, c: &Chart) -> Self {
-        let start_offset = -2.0; // 2秒倒计时
-        let core = JudgeCore::new(
-            JudgeWindow {
-                perfect: Time(0.08),
-                good: Time(0.16),
-            },
-            Time(0.008)
-        );
+    pub fn new(s: Song, c: &Chart, ctx: &AppContext) -> Self {
+        let start_offset = ctx.global_config.playing.ready_seconds; // 2秒倒计时,为正
         let total_notes: usize = c.tracks.iter().map(|t| t.notes.len()).sum();
         let max_score = (total_notes * 1000) as u32;
-        let man = JudgeManager::new(c.tracks.clone(), c.timing_map.clone(), core);
+        let mut man = JudgeManager::new(
+            c.tracks.clone(),
+            c.timing_map.clone(),
+            ctx.global_config.playing.judge_core,
+        );
+        man.judges.sort_by_key(|j| j.id);
+        
+        let mut key_pressed = HashMap::new();
+        for &track_idx in ctx.global_config.playing.keybind.values() {
+            key_pressed.insert(track_idx, false);
+        }
 
         Self {
-            elapsed_time: Time(start_offset),
+            elapsed_time: Time(-start_offset),
             phase: PlayingPhase::Ready,
             song_meta: s.meta,
             song_asset: s.asset,
@@ -66,8 +71,8 @@ impl PlayingState {
             miss_count: 0,
             manager: man,
             last_judge: None,
-            key_pressed: [false; 4],
-            debug_logs: vec![]
+            key_pressed,
+            debug_logs: vec![],
         }
     }
 
@@ -119,7 +124,9 @@ impl PlayingState {
     }
 
     pub fn get_accuracy_pct(&self) -> f64 {
-        if self.max_theoretical_score == 0 { return 0.0; }
+        if self.max_theoretical_score == 0 {
+            return 0.0;
+        }
         (self.score as f64 / self.max_theoretical_score as f64) * 101.0
     }
 
@@ -131,7 +138,10 @@ impl PlayingState {
         }
 
         // 1. 获取所有轨道中还未被判定的音符总数
-        let remaining_notes: usize = self.manager.judges.iter()
+        let remaining_notes: usize = self
+            .manager
+            .judges
+            .iter()
             .map(|j| j.notes.len().saturating_sub(j.cursor))
             .sum();
 
@@ -153,12 +163,7 @@ impl PlayingState {
     }
 
     pub fn log_event(&mut self, key_code: KeyCode, kind: KeyEventKind, time: f64) {
-        let log = format!(
-            "[{:.3}] {:?} {:?}",
-            time,
-            kind,
-            key_code
-        );
+        let log = format!("[{:.3}] {:?} {:?}", time, kind, key_code);
         self.debug_logs.push(log);
         if self.debug_logs.len() > 10 {
             self.debug_logs.remove(0);
@@ -167,9 +172,9 @@ impl PlayingState {
 }
 
 impl Stateful for PlayingState {
-    fn handle_input(&mut self, _ctx: &AppContext, event: KeyEvent) -> StateAction {
+    fn handle_input(&mut self, ctx: &AppContext, event: KeyEvent) -> StateAction {
         self.log_event(event.code, event.kind, self.elapsed_time.0);
-        let now = self.elapsed_time; // 直接使用包装类型
+        let now = self.elapsed_time;
         let is_down = match event.kind {
             KeyEventKind::Press => true,
             KeyEventKind::Release => false,
@@ -177,46 +182,54 @@ impl Stateful for PlayingState {
         };
 
         match (self.phase, event.code) {
-            (PlayingPhase::Ready, Char('q' | 'Q') | Esc) => if is_down { return StateAction::GoToCollection; },
-
-            (_, Char('q' | 'Q') | Esc) => if is_down {
-                return match self.phase {
-                    PlayingPhase::Playing => StateAction::TogglePause,
-                    PlayingPhase::Paused => StateAction::GoToCollection,
-                    _ => StateAction::None,
-                };
-            },
-
-            (PlayingPhase::Ready | PlayingPhase::Paused, Enter | Char(' ')) => if is_down {
-                return if self.phase == PlayingPhase::Ready {
-                    // 如果玩家在倒计时按确定，可以视为“直接开始”
-                    self.elapsed_time = Time(0.0);
-                    self.phase = PlayingPhase::Playing;
-                    StateAction::StartAudio { song_asset: self.song_asset.clone() }
-                } else {
-                    StateAction::TogglePause
+            (PlayingPhase::Ready, Char('q' | 'Q') | Esc) => {
+                if is_down {
+                    return StateAction::GoToCollection;
                 }
-            },
+            }
+
+            (_, Char('q' | 'Q') | Esc) => {
+                if is_down {
+                    return match self.phase {
+                        PlayingPhase::Playing => StateAction::TogglePause,
+                        PlayingPhase::Paused => StateAction::GoToCollection,
+                        _ => StateAction::None,
+                    };
+                }
+            }
+
+            (PlayingPhase::Ready | PlayingPhase::Paused, Enter | Char(' ')) => {
+                if is_down {
+                    return if self.phase == PlayingPhase::Ready {
+                        // 如果玩家在倒计时按确定，可以视为“直接开始”
+                        self.elapsed_time = Time(0.0);
+                        self.phase = PlayingPhase::Playing;
+                        StateAction::StartAudio {
+                            song_asset: self.song_asset.clone(),
+                        }
+                    } else {
+                        StateAction::TogglePause
+                    };
+                }
+            }
 
             // 准备的时候也能判定
             (PlayingPhase::Ready | PlayingPhase::Playing, Char(c)) => {
-                let track_idx = match c {
-                    'd' | 'D' => Some(0), 'f' | 'F' => Some(1),
-                    'j' | 'J' => Some(2), 'k' | 'K' => Some(3),
-                    _ => None,
-                };
+                let track_idx = ctx.global_config.playing.keybind.get(&c).copied();
 
                 if let Some(idx) = track_idx {
                     if is_down {
-                        if !self.key_pressed[idx] {
-                            self.key_pressed[idx] = true;
-                            if let Some(res) = self.manager.on_input(idx as u8, now, true) {
+                        // 使用 entry 确保安全访问并检查状态
+                        let pressed = self.key_pressed.entry(idx).or_insert(false);
+                        if !*pressed {
+                            *pressed = true;
+                            if let Some(res) = self.manager.on_input(idx, now, true) {
                                 self.process_judge_result(res);
                             }
                         }
                     } else {
-                        self.key_pressed[idx] = false;
-                        if let Some(res) = self.manager.on_input(idx as u8, now, false) {
+                        self.key_pressed.insert(idx, false);
+                        if let Some(res) = self.manager.on_input(idx, now, false) {
                             self.process_judge_result(res);
                         }
                     }
@@ -236,12 +249,14 @@ impl Stateful for PlayingState {
             PlayingPhase::Ready => {
                 self.elapsed_time.0 += dt.as_secs_f64();
                 // 为了平滑过渡到 Playing, 在这里要处理好 Offset
-                let start_threshold = ctx.global_offset_ms as f64 / 1000.0;
+                let start_threshold = ctx.global_config.playing.global_offset_ms as f64 / 1000.0;
 
                 if self.elapsed_time.0 >= start_threshold {
                     self.elapsed_time = Time(start_threshold);
                     self.phase = PlayingPhase::Playing;
-                    return StateAction::StartAudio { song_asset: self.song_asset.clone() };
+                    return StateAction::StartAudio {
+                        song_asset: self.song_asset.clone(),
+                    };
                 }
                 StateAction::None
             }

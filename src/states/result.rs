@@ -1,12 +1,13 @@
 use crate::app::AppContext;
 use crate::core::chart::ChartMeta;
-use crate::models::{Rank, SongMeta};
+use crate::models::{SongMeta};
 use crate::states::playing::PlayingState;
 use crate::states::{StateAction, Stateful};
 use crate::ui;
 use ratatui::Frame;
 use ratatui::crossterm::event::KeyCode::{Char, Esc};
 use ratatui::crossterm::event::KeyEvent;
+use crate::rank::Rank;
 
 pub struct ResultState {
     pub score: u32,

@@ -5,8 +5,8 @@ use crate::core::timing::{Beat, TimingMap, BpmChange, Time};
 // --- Malody 原始格式定义 ---
 #[derive(Deserialize)]
 struct McMeta {
-    #[serde(rename = "$ver")]
-    ver: u32,
+    // #[serde(rename = "$ver")]
+    // ver: u32,
     creator: String,
     background: String,
     version: String,  // 谱面难度名，例如 "4K", "Hard"

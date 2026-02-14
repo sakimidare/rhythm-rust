@@ -10,6 +10,7 @@ use ratatui::crossterm::event::{self, Event};
 use ratatui::{Terminal, backend::CrosstermBackend};
 use std::io::Stdout;
 use std::time::{Duration, Instant};
+use crate::config::GlobalConfig;
 
 pub struct App {
     is_running: bool,
@@ -20,18 +21,18 @@ pub struct App {
 pub struct AppContext {
     pub songs: Vec<Song>,
     pub audio: AudioManager,
-    pub global_offset_ms: i32,
+    pub global_config: GlobalConfig
 }
 
 impl App {
-    pub fn new(songs: Vec<Song>, offset: i32) -> Self {
+    pub fn new(songs: Vec<Song>, global_config: GlobalConfig) -> Self {
         Self {
             is_running: true,
             state: Welcome(WelcomeState),
             context: AppContext {
                 songs,
                 audio: AudioManager::new(),
-                global_offset_ms: offset,
+                global_config,
             },
         }
     }
@@ -46,7 +47,10 @@ impl App {
             if let Playing(ref mut s) = self.state {
                 if s.phase == PlayingPhase::Playing {
                     let current_pos = self.context.audio.get_pos();
-                    s.sync_audio_time(current_pos, self.context.global_offset_ms);
+                    s.sync_audio_time(
+                        current_pos, 
+                        self.context.global_config.playing.global_offset_ms
+                    );
                 }
             }
 
@@ -82,7 +86,7 @@ impl App {
                 self.state = State::Collection(CollectionState::new(self.context.songs.len()))
             }
             StateAction::GoToPlaying { song, chart } => {
-                self.state = Playing(PlayingState::new(song, &chart));
+                self.state = Playing(PlayingState::new(song, &chart, &self.context));
             }
             StateAction::StartAudio { song_asset } => {
                 if let Some(path) = song_asset.audio.get_local_path() {

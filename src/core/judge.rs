@@ -12,6 +12,7 @@
 //! └────────────┘
 //! ```
 
+use serde::{Deserialize, Serialize};
 use crate::core::chart::{Note, Track};
 use crate::core::timing::{Time, TimingMap};
 
@@ -25,13 +26,13 @@ pub enum JudgeResult {
 /// |delta| <= perfect  -> Perfect
 /// |delta| <= good     -> Good
 /// else                 Miss
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct JudgeWindow {
     pub perfect: Time,
     pub good: Time,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct JudgeCore {
     pub window: JudgeWindow,
     pub hold_tolerance: Time,
@@ -77,7 +78,7 @@ pub enum NoteState {
 /// - states.len() == notes.len()
 /// - cursor points to first Pending note
 pub struct NoteJudge {
-    id: u8,
+    pub id: u8,
     pub notes: Vec<Note>,
     pub states: Vec<NoteState>,
     pub(crate) cursor: usize,
@@ -207,52 +208,6 @@ impl NoteJudge {
                 }
                 None
             }
-
-            // ================= HOLD =================
-            /*Note::Hold { start, .. } => {
-                match self.states[self.cursor] {
-                    NoteState::Pending => {
-                        if !is_down {
-                            return None;
-                        }
-
-                        let start_time = timing_map.beat_to_time(start);
-                        let delta = input_time - start_time;
-                        if delta.abs() <= judge.window.good {
-                            let result = judge.judge(JudgeInput {
-                                note_time: start_time,
-                                input_time,
-                            });
-                            self.states[self.cursor] = NoteState::Holding(result);
-
-                            return None;
-                        }
-                        None
-                    }
-
-                    NoteState::Holding(_) => {
-                        if is_down {
-                            return None;
-                        } // 持续按住，无事件发生
-                        let start_time = timing_map.beat_to_time(start);
-                        // 玩家松手了，进行结尾判定
-                        let result = judge.judge(JudgeInput {
-                            note_time: start_time,
-                            input_time,
-                        });
-
-                        // 无论判定如何，松手就意味着这个 Hold 结束了
-                        self.states[self.cursor] = match result {
-                            JudgeResult::Miss => NoteState::Missed,
-                            _ => NoteState::Hit,
-                        };
-                        self.cursor += 1;
-                        Some(result)
-                    }
-                    _ => None,
-                }
-            }*/
-
             Note::Hold { start, .. } => {
                 match self.states[self.cursor] {
                     NoteState::Pending => {
@@ -315,12 +270,12 @@ impl JudgeManager {
 
     pub fn update(&mut self, now: Time) -> Vec<UpdateResult> {
         let mut all_results = Vec::new();
-        for (track_idx, judge) in self.judges.iter_mut().enumerate() {
+        for judge in self.judges.iter_mut() {
+            let real_id = judge.id as usize; // 获取 NoteJudge 内部存储的真实 id
             let results = judge.update(now, &self.core, &self.map);
             for (note_idx, res) in results {
-                // 返回 (轨道号, Note编号, 结果)
                 all_results.push(UpdateResult {
-                    track_idx,
+                    track_idx: real_id, // 🚩 存储真实 ID
                     note_idx,
                     result: res,
                 });
