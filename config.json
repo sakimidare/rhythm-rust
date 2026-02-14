@@ -22,6 +22,7 @@
     "show_potential_rank": true,
     "show_debug_overlay": false,
     "speed": 40.0,
-    "track_width": 8
+    "track_width": 8,
+    "autoplay": false
   }
 }

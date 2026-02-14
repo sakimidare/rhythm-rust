@@ -68,7 +68,17 @@ fn calculate_y(note_time: f64, current_time: f64, judgment_line_y: u16, speed: f
 }
 
 fn draw_play_panel(state: &PlayingState, f: &mut Frame, area: Rect, speed: f64) {
-    let block = Block::default().borders(Borders::ALL).title(" PLAYING ");
+    let (title_text, title_style) = if state.is_autoplay {
+        (" PLAYING (AUTOPLAY) ", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD))
+    } else {
+        (" PLAYING ", Style::default())
+    };
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(title_text)
+        .title_style(title_style);
+
     let inner_area = block.inner(area);
     f.render_widget(block, area);
 
@@ -213,7 +223,7 @@ fn draw_stats_panel(
             Constraint::Length(4),
             Constraint::Length(1),
             Constraint::Length(4),
-            Constraint::Min(0),
+            Constraint::Min(2),
         ])
         .split(area);
 
@@ -237,6 +247,13 @@ fn draw_stats_panel(
             Span::styled(format!("{:07}", state.score), Style::default().fg(Color::Cyan)),
         ]),
     ];
+    if state.is_autoplay {
+        let autoplay_label = Paragraph::new("AUTO-PLAY ENABLED")
+            .alignment(Alignment::Left)
+            .style(Style::default().fg(Color::Magenta).add_modifier(Modifier::ITALIC));
+        f.render_widget(autoplay_label, chunks[4]);
+    }
+
     f.render_widget(Paragraph::new(stats), chunks[3]);
 }
 

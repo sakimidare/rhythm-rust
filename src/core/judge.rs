@@ -168,7 +168,7 @@ impl NoteJudge {
     }
 
     /// 输入事件（同一 track）
-    fn on_input(
+    pub(crate) fn on_input(
         &mut self,
         input_time: Time,
         is_down: bool,
@@ -240,7 +240,7 @@ impl NoteJudge {
 
 pub struct JudgeManager {
     pub judges: Vec<NoteJudge>,
-    core: JudgeCore,
+    pub(crate) core: JudgeCore,
     pub map: TimingMap,
 }
 

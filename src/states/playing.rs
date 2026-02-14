@@ -37,6 +37,7 @@ pub struct PlayingState {
     pub last_judge: Option<(JudgeResult, Instant)>,
     pub key_pressed: HashMap<u8, bool>,
     pub debug_logs: Vec<String>,
+    pub is_autoplay: bool
 }
 
 impl PlayingState {
@@ -73,6 +74,7 @@ impl PlayingState {
             last_judge: None,
             key_pressed,
             debug_logs: vec![],
+            is_autoplay: ctx.global_config.playing.autoplay
         }
     }
 
@@ -101,16 +103,18 @@ impl PlayingState {
         self.elapsed_time.0
     }
 
-    fn process_judge_result(&mut self, result: JudgeResult) {
+    fn process_judge_result(&mut self, ctx: &AppContext, result: JudgeResult) {
         self.last_judge = Some((result, Instant::now()));
         match result {
             JudgeResult::Perfect(_) => {
+                // ctx.audio.play_hit_effect();
                 self.perfect_count += 1;
                 self.score += 1000;
                 self.combo += 1;
                 self.max_combo = self.max_combo.max(self.combo);
             }
             JudgeResult::Good(_) => {
+                // ctx.audio.play_hit_effect();
                 self.good_count += 1;
                 self.score += 500;
                 self.combo += 1;
@@ -215,6 +219,10 @@ impl Stateful for PlayingState {
 
             // 准备的时候也能判定
             (PlayingPhase::Ready | PlayingPhase::Playing, Char(c)) => {
+                if self.is_autoplay && ctx.global_config.playing.keybind.contains_key(&c) {
+                    return StateAction::None;
+                }
+
                 let track_idx = ctx.global_config.playing.keybind.get(&c).copied();
 
                 if let Some(idx) = track_idx {
@@ -224,13 +232,13 @@ impl Stateful for PlayingState {
                         if !*pressed {
                             *pressed = true;
                             if let Some(res) = self.manager.on_input(idx, now, true) {
-                                self.process_judge_result(res);
+                                self.process_judge_result(ctx, res);
                             }
                         }
                     } else {
                         self.key_pressed.insert(idx, false);
                         if let Some(res) = self.manager.on_input(idx, now, false) {
-                            self.process_judge_result(res);
+                            self.process_judge_result(ctx, res);
                         }
                     }
                 }
@@ -261,17 +269,59 @@ impl Stateful for PlayingState {
                 StateAction::None
             }
             PlayingPhase::Playing => {
-                // 自动处理判定更新（主要是 Miss 检查）
+                let now = self.elapsed_time;
+
+                // 1. 先处理 Autoplay，把产生的判定结果存入一个临时 Vec
+                if self.is_autoplay {
+                    let mut autoplay_results = Vec::new();
+
+                    // 🚩 只借用 manager，不借用整个 self
+                    for judge in &mut self.manager.judges {
+                        if let Some(note) = judge.notes.get(judge.cursor) {
+                            let note_time = self.manager.map.beat_to_time(&note.beat());
+
+                            if now >= note_time {
+                                match note {
+                                    crate::core::chart::Note::Tap { .. } => {
+                                        if let Some(res) = judge.on_input(now, true, &self.manager.core, &self.manager.map) {
+                                            autoplay_results.push(res);
+                                        }
+                                    }
+                                    crate::core::chart::Note::Hold { end, .. } => {
+                                        let end_time = self.manager.map.beat_to_time(end);
+                                        let state = judge.states[judge.cursor];
+
+                                        if state == crate::core::judge::NoteState::Pending {
+                                            judge.on_input(now, true, &self.manager.core, &self.manager.map);
+                                        } else if now >= end_time {
+                                            if let Some(res) = judge.on_input(now, false, &self.manager.core, &self.manager.map) {
+                                                autoplay_results.push(res);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 2. Autoplay 处理完释放了 manager 的借用，现在可以安全调用 self 的方法了
+                    for res in autoplay_results {
+                        self.process_judge_result(ctx, res);
+                    }
+                }
+
+                // 3. 处理正常的更新（如自动 Miss）
+                // 这里你的代码原本就已经是先 update 拿结果，再循环处理，所以这部分通常是没问题的
                 let updates = self.manager.update(self.elapsed_time);
                 for update in updates {
-                    self.process_judge_result(update.result);
+                    self.process_judge_result(ctx, update.result);
                 }
 
                 // 检查音频结束
                 if ctx.audio.is_finished() {
                     let remaining_misses = self.manager.clear_and_count_unjudged();
                     for _ in 0..remaining_misses {
-                        self.process_judge_result(JudgeResult::Miss);
+                        self.process_judge_result(ctx, JudgeResult::Miss);
                     }
 
                     self.phase = PlayingPhase::Finished;

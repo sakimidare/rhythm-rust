@@ -15,10 +15,17 @@ pub fn draw_result(state: &ResultState, f: &mut Frame) {
         .split(area);
 
     // 渲染顶部横幅
-    let header = Paragraph::new(format!(" {} - [Lv. {}] ", state.song_meta.title, state.chart_meta.level))
-        .block(Block::default().borders(Borders::BOTTOM))
-        .alignment(Alignment::Center)
-        .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD));
+    let header = Paragraph::new(format!(
+        " {} - [Lv. {}] ",
+        state.song_meta.title, state.chart_meta.level
+    ))
+    .block(Block::default().borders(Borders::BOTTOM))
+    .alignment(Alignment::Center)
+    .style(
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD),
+    );
     f.render_widget(header, main_layout[0]);
 
     // 2. 内容布局：左右结构
@@ -34,7 +41,7 @@ pub fn draw_result(state: &ResultState, f: &mut Frame) {
     // --- 左侧：巨大 Rank 渲染 ---
     let rank_color = state.rank.to_color();
     // 1. 获取字符画原始文本
-    let raw_ascii =  state.rank.to_large_ascii();
+    let raw_ascii = state.rank.to_large_ascii();
 
     // 2. 找到最长的一行有多少个字符
     let max_width = raw_ascii.lines().map(|l| l.len()).max().unwrap_or(0);
@@ -56,23 +63,44 @@ pub fn draw_result(state: &ResultState, f: &mut Frame) {
         .block(Block::default().padding(Padding::vertical(4)));
     f.render_widget(rank_para, content_layout[0]);
 
+    let mut stats_text = vec![];
     // --- 右侧：详细统计数据 ---
+    if state.is_autoplay {
+        // 假设 ResultState 中也同步了这个字段
+        stats_text.push(Line::from(vec![Span::styled(
+            " ● AUTO PLAY MODE ",
+            Style::default()
+                .fg(Color::Magenta)
+                .add_modifier(Modifier::BOLD | Modifier::REVERSED),
+        )]));
+        stats_text.push(Line::from(""));
+    }
     // 我们将 Perfect, Good, Miss 渲染得更像统计表
-    let stats_text = vec![
+    stats_text.extend(vec![
         Line::from(vec![
             Span::raw(" SCORE    "),
-            Span::styled(format!("{:07}", state.score), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                format!("{:07}", state.score),
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
         ]),
         Line::from(vec![
             Span::raw(" ACCURACY "),
-            Span::styled(format!("{:.2}%", state.accuracy), Style::default().fg(Color::Yellow)),
+            Span::styled(
+                format!("{:.2}%", state.accuracy),
+                Style::default().fg(Color::Yellow),
+            ),
         ]),
         Line::from(vec![
             Span::raw(" COMBO    "),
-            Span::styled(format!("{}", state.max_combo), Style::default().fg(Color::Green)),
+            Span::styled(
+                format!("{}", state.max_combo),
+                Style::default().fg(Color::Green),
+            ),
         ]),
         Line::from("-".repeat(30)).style(Style::default().fg(Color::DarkGray)),
-
         // 判定统计
         Line::from(vec![
             Span::styled(" PERFECT  ", Style::default().fg(Color::Cyan)),
@@ -86,14 +114,13 @@ pub fn draw_result(state: &ResultState, f: &mut Frame) {
             Span::styled(" MISS     ", Style::default().fg(Color::Red)),
             Span::raw(format!(" {:3}", state.miss_count)),
         ]),
-
         Line::from(""),
-        Line::from(" [Q/Esc] Back to Collection ").style(Style::default().add_modifier(Modifier::REVERSED)),
-    ];
+        Line::from(" [Q/Esc] Back to Collection ")
+            .style(Style::default().add_modifier(Modifier::REVERSED)),
+    ]);
 
     f.render_widget(
-        Paragraph::new(stats_text)
-            .block(Block::default().padding(Padding::uniform(1))),
-        content_layout[1]
+        Paragraph::new(stats_text).block(Block::default().padding(Padding::uniform(1))),
+        content_layout[1],
     );
 }

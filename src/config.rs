@@ -21,7 +21,8 @@ pub struct PlayingConfig {
     pub show_potential_rank: bool,
     pub show_debug_overlay: bool,
     pub speed: f64,
-    pub track_width: u16
+    pub track_width: u16,
+    pub autoplay: bool
 }
 
 impl GlobalConfig {
@@ -73,7 +74,8 @@ mod tests {
                 keybind,
                 judge_core,
                 speed: 40.0,
-                track_width: 8
+                track_width: 8,
+                autoplay: false
             }
         };
 

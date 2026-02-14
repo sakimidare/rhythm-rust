@@ -11,6 +11,7 @@ use crate::rank::Rank;
 
 pub struct ResultState {
     pub score: u32,
+    pub is_autoplay: bool,
     pub max_combo: u32,
     pub perfect_count: u32,
     pub good_count: u32,
@@ -38,6 +39,7 @@ impl ResultState {
     pub(crate) fn from_playing(p: &PlayingState, score: u32, rank: Rank) -> Self {
         Self {
             score,
+            is_autoplay: p.is_autoplay,
             max_combo: p.max_combo,
             perfect_count: p.perfect_count,
             good_count: p.good_count,

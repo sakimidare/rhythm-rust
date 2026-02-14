@@ -31,6 +31,7 @@ pub struct Beat(pub f64);
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TimingMap {
+    // 如果谱面比音乐快，请往正方向调
     pub offset: Time,                // Time at Beat(0.0)
     pub bpm_changes: Vec<BpmChange>, // sorted by beat
 }
