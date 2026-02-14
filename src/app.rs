@@ -57,7 +57,7 @@ impl App {
             terminal.draw(|f| self.state.draw(&self.context, f))?;
 
             // 轮询检测是否有按键事件
-            if event::poll(Duration::from_millis(4))? {
+            if event::poll(Duration::from_millis(self.context.global_config.poll_period))? {
                 if let Event::Key(key) = event::read()? {
                     let action = self.state.handle_input(&self.context, key);
                     self.resolve_action(action);

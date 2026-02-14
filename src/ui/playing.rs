@@ -13,17 +13,22 @@ pub fn draw_playing(
 ) {
     let area = f.area();
 
+    let track_count = state.manager.judges.len() as u16;
+    let play_panel_width = (track_count * ctx.global_config.playing.track_width) + 2;
+
     let main_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
             Constraint::Fill(1),
-            Constraint::Length(34),
+            Constraint::Length(play_panel_width), // 动态撑开
             Constraint::Fill(1),
         ])
         .split(area);
 
     draw_info_panel(state, f, main_chunks[0]);
-    draw_play_panel(state, f, main_chunks[1]);
+    draw_play_panel(state, f, main_chunks[1],
+                    ctx.global_config.playing.speed,
+    );
     draw_stats_panel(state, f, main_chunks[2],
                      ctx.global_config.playing.show_potential_acc,
                      ctx.global_config.playing.show_potential_rank
@@ -62,24 +67,28 @@ fn calculate_y(note_time: f64, current_time: f64, judgment_line_y: u16, speed: f
     judgment_line_y as i32 - (time_diff * speed) as i32
 }
 
-fn draw_play_panel(state: &PlayingState, f: &mut Frame, area: Rect) {
+fn draw_play_panel(state: &PlayingState, f: &mut Frame, area: Rect, speed: f64) {
     let block = Block::default().borders(Borders::ALL).title(" PLAYING ");
     let inner_area = block.inner(area);
     f.render_widget(block, area);
 
     let now = state.current_time();
-    let track_width = inner_area.width / 4;
-    let judgment_line_y = inner_area.bottom().saturating_sub(1); // 调整到底部
-    let speed = 40.0;
+    let track_count = state.manager.judges.len() as u16;
+    if track_count == 0 { return; }
+
+    // 🚩 修复 2: 根据实际轨道数分配宽度
+    let track_width = inner_area.width / track_count;
+
+    let judgment_line_y = inner_area.bottom().saturating_sub(1);
 
     // 1. 绘制轨道背景 (当按键按下时亮起)
     for (t_idx, judge) in state.manager.judges.iter().enumerate() {
         let x = inner_area.x + (t_idx as u16 * track_width);
-        let is_pressed = state.key_pressed.get(&judge.id).copied().unwrap_or(false);
-
-        if is_pressed {
-            let backlight = Block::default().bg(Color::Indexed(234));
-            f.render_widget(backlight, Rect::new(x, inner_area.y, track_width, inner_area.height));
+        if state.key_pressed.get(&judge.id).copied().unwrap_or(false) {
+            f.render_widget(
+                Block::default().bg(Color::Indexed(234)),
+                Rect::new(x, inner_area.y, track_width, inner_area.height)
+            );
         }
     }
     // 2. 绘制判定线
@@ -90,13 +99,16 @@ fn draw_play_panel(state: &PlayingState, f: &mut Frame, area: Rect) {
     );
 
     // 3. 遍历轨道绘制音符
+    let note_padding = 1;
+    let visual_note_width = track_width.saturating_sub(note_padding * 2);
+
     for (t_idx, judge) in state.manager.judges.iter().enumerate() {
-        let x = inner_area.x + (t_idx as u16 * track_width);
+        let track_x = inner_area.x + (t_idx as u16 * track_width);
+        // 音符实际绘制的起始 X 坐标
+        let note_x = track_x + note_padding;
 
         for (n_idx, note) in judge.notes.iter().enumerate() {
             let note_state = judge.states[n_idx];
-
-            // 已判定的音符不再绘制
             if !matches!(note_state, NoteState::Pending | NoteState::Holding(_)) {
                 continue;
             }
@@ -107,10 +119,13 @@ fn draw_play_panel(state: &PlayingState, f: &mut Frame, area: Rect) {
                     let y = calculate_y(note_time, now, judgment_line_y, speed);
 
                     if y >= inner_area.top() as i32 && y <= judgment_line_y as i32 {
-                        let style = if t_idx == 1 || t_idx == 2 { Color::Cyan } else { Color::White };
+                        let symbol = "━".repeat(visual_note_width as usize);
+                        let style = if t_idx % 2 == 1 { Color::Cyan } else { Color::White };
+
                         f.render_widget(
-                            Paragraph::new("━━━━").style(Style::default().fg(style).add_modifier(Modifier::BOLD)),
-                            Rect::new(x + 1, y as u16, track_width - 1, 1)
+                            Paragraph::new(symbol).style(Style::default().fg(style).add_modifier(Modifier::BOLD)),
+                            // 使用 note_x 和 visual_note_width
+                            Rect::new(note_x, y as u16, visual_note_width, 1)
                         );
                     }
                 }
@@ -123,29 +138,36 @@ fn draw_play_panel(state: &PlayingState, f: &mut Frame, area: Rect) {
                     } else {
                         calculate_y(start_time, now, judgment_line_y, speed)
                     };
-
                     let y_end = calculate_y(end_time, now, judgment_line_y, speed);
 
-                    // 绘制长条身体
                     let draw_top = y_end.max(inner_area.top() as i32);
                     let draw_bottom = y_start.min(judgment_line_y as i32);
 
                     if draw_top < draw_bottom {
-                        let body_style = if matches!(note_state, NoteState::Holding(_)) { Color::Yellow } else { Color::DarkGray };
+                        let body_style = if matches!(judge.states[n_idx], NoteState::Holding(_)) { Color::Yellow } else { Color::DarkGray };
+
+                        // 让 Hold 身体线和 Tap 等宽或者略窄（通常略窄更美观，这里设为与 Tap 等宽）
+                        let hold_symbol = "┃".repeat(visual_note_width as usize);
+                        // 如果你喜欢空心的 Hold，可以用下面的逻辑：
+                        // let side = "┃";
+                        // let gap = " ".repeat(visual_note_width.saturating_sub(2) as usize);
+                        // let hold_symbol = format!("{}{}{}", side, gap, side);
+
                         for y_fill in draw_top..draw_bottom {
                             f.render_widget(
-                                Paragraph::new("┃  ┃").style(Style::default().fg(body_style)),
-                                Rect::new(x + 1, y_fill as u16, track_width - 1, 1)
+                                Paragraph::new(hold_symbol.as_str()).style(Style::default().fg(body_style)),
+                                Rect::new(note_x, y_fill as u16, visual_note_width, 1)
                             );
                         }
                     }
 
-                    // 绘制头部
+                    // 绘制 Hold 头部（与 Tap 保持一致）
                     if !matches!(note_state, NoteState::Holding(_)) &&
                         y_start >= inner_area.top() as i32 && y_start <= judgment_line_y as i32 {
+                        let head_symbol = "▆".repeat(visual_note_width as usize);
                         f.render_widget(
-                            Paragraph::new("▆▆▆▆").style(Style::default().fg(Color::Yellow)),
-                            Rect::new(x + 1, y_start as u16, track_width - 1, 1)
+                            Paragraph::new(head_symbol).style(Style::default().fg(Color::Yellow)),
+                            Rect::new(note_x, y_start as u16, visual_note_width, 1)
                         );
                     }
                 }

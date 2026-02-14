@@ -7,7 +7,7 @@ use log::error;
 pub struct GlobalConfig {
     pub song_dir_path: String,
     pub log_path: String,
-    pub poll_period: i32,
+    pub poll_period: u64,
     pub playing: PlayingConfig
 }
 
@@ -20,6 +20,8 @@ pub struct PlayingConfig {
     pub show_potential_acc: bool,
     pub show_potential_rank: bool,
     pub show_debug_overlay: bool,
+    pub speed: f64,
+    pub track_width: u16
 }
 
 impl GlobalConfig {
@@ -69,7 +71,9 @@ mod tests {
                 show_potential_rank: true,
                 show_debug_overlay: true,
                 keybind,
-                judge_core
+                judge_core,
+                speed: 40.0,
+                track_width: 8
             }
         };
 

@@ -3,8 +3,8 @@
   "log_path": "./game.log",
   "poll_period": 4,
   "playing": {
-    "global_offset_ms": 800,
-    "ready_seconds": 3.0,
+    "global_offset_ms": -770,
+    "ready_seconds": 5.0,
     "judge_core": {
       "window": {
         "perfect": 0.08,
@@ -20,6 +20,8 @@
     },
     "show_potential_acc": true,
     "show_potential_rank": true,
-    "show_debug_overlay": true
+    "show_debug_overlay": false,
+    "speed": 40.0,
+    "track_width": 8
   }
 }
